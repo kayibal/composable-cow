@@ -78,6 +78,4 @@ contract DutchAuction is BaseConditionalOrder {
             GPv2Order.BALANCE_ERC20
         );
     }
-
-    event Log(uint256 x);
 }

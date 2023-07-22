@@ -140,6 +140,34 @@ contract ComposableCoWDutchAuctionTest is BaseComposableCoWTest {
         assertLe(res.buyAmount, 2 ether);
     }
 
+    bytes32 domainSeparator = 0x8f05589c4b810bc2f706854508d66d447cd971f8354a4bb0b3471ceb0a466bc7;
+
+    function test_verifyOrder() public {
+        DutchAuction.Data memory data = DutchAuction.Data({
+            sellToken: SELL_TOKEN,
+            buyToken: BUY_TOKEN,
+            sellAmount: 5 * 10 ** 16,
+            appData: APP_DATA,
+            receiver: address(0x0),
+            isPartiallyFillable: false,
+            sellTokenPriceOracle: mockOracle(SELL_ORACLE, 188620000000, 8),
+            buyTokenPriceOracle: mockOracle(BUY_ORACLE, 11786941523, 8),
+            startTs: 1_000_000,
+            duration: 100,
+            timeStep: 10,
+            startPrice: uint256(188620000000),
+            endPrice: uint256(188620000000) * 90 / 100
+        });
+        vm.warp(1_000_000 + 50);
+        GPv2Order.Data memory empty;
+        GPv2Order.Data memory order =
+            dutchAuction.getTradeableOrder(safe, address(0), bytes32(0), abi.encode(data), bytes(""));
+        bytes32 hash_ = GPv2Order.hash(order, domainSeparator);
+        vm.warp(1_000_000 + 51);
+
+        dutchAuction.verify(safe, address(0), hash_, domainSeparator, bytes32(0), abi.encode(data), bytes(""), empty);
+    }
+
     function test_limitPriceIntegration() public {
         DutchAuction.Data memory data = DutchAuction.Data({
             sellToken: SELL_TOKEN,
@@ -165,74 +193,5 @@ contract ComposableCoWDutchAuctionTest is BaseComposableCoWTest {
         assertGe(res.buyAmount, 6 * 10 ** 17);
     }
 
-    /*
-
-    function test_strikePriceMet_fuzz(int256 sellTokenOraclePrice, int256 buyTokenOraclePrice, int256 strike) public {
-        vm.assume(buyTokenOraclePrice > 0);
-        vm.assume(sellTokenOraclePrice > 0);
-        vm.assume(strike > 0);
-        vm.assume(sellTokenOraclePrice / buyTokenOraclePrice <= strike);
-
-        StopLoss.Data memory data = StopLoss.Data({
-            sellToken: SELL_TOKEN,
-            buyToken: BUY_TOKEN,
-            sellTokenPriceOracle: mockOracle(SELL_ORACLE, sellTokenOraclePrice),
-            buyTokenPriceOracle: mockOracle(BUY_ORACLE, buyTokenOraclePrice),
-            strike: strike,
-            sellAmount: 1 ether,
-            buyAmount: 1 ether,
-            appData: APP_DATA,
-            receiver: address(0x0),
-            isSellOrder: false,
-            isPartiallyFillable: false,
-            validityBucketSeconds: 15 minutes
-        });
-
-        // 25 June 2023 18:40:51
-        vm.warp(1687718451);
-
-        GPv2Order.Data memory order =
-            stopLoss.getTradeableOrder(safe, address(0), bytes32(0), abi.encode(data), bytes(""));
-        assertEq(address(order.sellToken), address(SELL_TOKEN));
-        assertEq(address(order.buyToken), address(BUY_TOKEN));
-        assertEq(order.sellAmount, 1 ether);
-        assertEq(order.buyAmount, 1 ether);
-        assertEq(order.receiver, address(0x0));
-        assertEq(order.validTo, 1687718700);
-        assertEq(order.appData, APP_DATA);
-        assertEq(order.feeAmount, 0);
-        assertEq(order.kind, GPv2Order.KIND_BUY);
-        assertEq(order.partiallyFillable, false);
-        assertEq(order.sellTokenBalance, GPv2Order.BALANCE_ERC20);
-        assertEq(order.buyTokenBalance, GPv2Order.BALANCE_ERC20);
-    }
-
-    function test_validTo() public {
-        StopLoss.Data memory data = StopLoss.Data({
-            sellToken: SELL_TOKEN,
-            buyToken: BUY_TOKEN,
-            sellTokenPriceOracle: mockOracle(SELL_ORACLE, 99 ether),
-            buyTokenPriceOracle: mockOracle(BUY_ORACLE, 100 ether),
-            strike: 1,
-            sellAmount: 1 ether,
-            buyAmount: 1 ether,
-            appData: APP_DATA,
-            receiver: address(0x0),
-            isSellOrder: false,
-            isPartiallyFillable: false,
-            validityBucketSeconds: 1 hours
-        });
-
-        // 25 June 2023 18:59:59
-        vm.warp(1687712399);
-        GPv2Order.Data memory order =
-            stopLoss.getTradeableOrder(safe, address(0), bytes32(0), abi.encode(data), bytes(""));
-        assertEq(order.validTo, 1687712400); // 25 June 2023 19:00:00
-
-        // 25 June 2023 19:00:00
-        vm.warp(1687712400);
-        order = stopLoss.getTradeableOrder(safe, address(0), bytes32(0), abi.encode(data), bytes(""));
-        assertEq(order.validTo, 1687716000); // 25 June 2023 20:00:00
-    }
-    */
+    // TODO: fix different token decimal buy amounts
 }
