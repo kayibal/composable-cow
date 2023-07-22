@@ -37,13 +37,16 @@ contract DutchAuction is BaseConditionalOrder {
         returns (GPv2Order.Data memory order)
     {
         Data memory data = abi.decode(staticInput, (Data));
-        uint32 currentTs = uint32(block.timestamp);
+        uint32 currentTs = (uint32(block.timestamp) / data.timeStep) * data.timeStep;
+        uint256 x;
+        // due to rounding/binning current ts might be in the past
         if (currentTs < data.startTs) {
-            // the order is not valid yet
-            revert IConditionalOrder.OrderNotValid();
+            x = 0;
+        } else {
+            // calculate x in terms of dx steps
+            x = ((currentTs - data.startTs) / data.timeStep) * data.timeStep;
         }
-        // calculate x in terms of dx steps
-        uint256 x = ((currentTs - data.startTs) / data.timeStep) * data.timeStep;
+
         if (x > data.duration) {
             // the order is too old
             revert IConditionalOrder.OrderNotValid();

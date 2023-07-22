@@ -153,17 +153,17 @@ contract ComposableCoWDutchAuctionTest is BaseComposableCoWTest {
             sellTokenPriceOracle: mockOracle(SELL_ORACLE, 188620000000, 8),
             buyTokenPriceOracle: mockOracle(BUY_ORACLE, 11786941523, 8),
             startTs: 1_000_000,
-            duration: 100,
-            timeStep: 10,
+            duration: 600,
+            timeStep: 120,
             startPrice: uint256(188620000000),
             endPrice: uint256(188620000000) * 90 / 100
         });
-        vm.warp(1_000_000 + 50);
+        vm.warp(1_000_000);
         GPv2Order.Data memory empty;
         GPv2Order.Data memory order =
             dutchAuction.getTradeableOrder(safe, address(0), bytes32(0), abi.encode(data), bytes(""));
         bytes32 hash_ = GPv2Order.hash(order, domainSeparator);
-        vm.warp(1_000_000 + 51);
+        vm.warp(1_000_000 + 79);
 
         dutchAuction.verify(safe, address(0), hash_, domainSeparator, bytes32(0), abi.encode(data), bytes(""), empty);
     }
