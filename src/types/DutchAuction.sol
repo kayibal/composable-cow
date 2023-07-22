@@ -20,8 +20,11 @@ contract DutchAuction is BaseConditionalOrder {
         // start and end price need to be in the oracle numeraire
         uint256 startPrice;
         uint256 endPrice;
+        // the time the auction starts
         uint32 startTs;
+        // how long the auction will run for
         uint32 duration;
+        // time step, after each step a new order with adjusted limit price is emitted
         uint32 timeStep;
     }
 
