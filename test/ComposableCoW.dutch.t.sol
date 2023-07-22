@@ -23,14 +23,16 @@ contract ComposableCoWDutchAuctionTest is BaseComposableCoWTest {
         dutchAuction = new DutchAuction();
     }
 
-    function priceToAddress(int256 price) internal returns (address) {
-        return address(uint160(int160(price)));
-    }
-
     function mockOracle(address mock, int256 price) internal returns (IAggregatorV3Interface iface) {
         iface = IAggregatorV3Interface(mock);
         vm.mockCall(mock, abi.encodeWithSelector(iface.latestRoundData.selector), abi.encode(0, price, 0, 0, 0));
         vm.mockCall(mock, abi.encodeWithSelector(iface.decimals.selector), abi.encode(18));
+    }
+
+    function mockOracle(address mock, int256 price, uint256 decimals) internal returns (IAggregatorV3Interface iface) {
+        iface = IAggregatorV3Interface(mock);
+        vm.mockCall(mock, abi.encodeWithSelector(iface.latestRoundData.selector), abi.encode(0, price, 0, 0, 0));
+        vm.mockCall(mock, abi.encodeWithSelector(iface.decimals.selector), abi.encode(decimals));
     }
 
     function test_limitPriceAtStart_concrete() public {
@@ -136,6 +138,31 @@ contract ComposableCoWDutchAuctionTest is BaseComposableCoWTest {
 
         assertGe(res.buyAmount, 1 ether);
         assertLe(res.buyAmount, 2 ether);
+    }
+
+    function test_limitPriceIntegration() public {
+        DutchAuction.Data memory data = DutchAuction.Data({
+            sellToken: SELL_TOKEN,
+            buyToken: BUY_TOKEN,
+            sellAmount: 5 * 10 ** 16,
+            appData: APP_DATA,
+            receiver: address(0x0),
+            isPartiallyFillable: false,
+            sellTokenPriceOracle: mockOracle(SELL_ORACLE, 188620000000, 8),
+            buyTokenPriceOracle: mockOracle(BUY_ORACLE, 11786941523, 8),
+            startTs: 1_000_000,
+            duration: 100,
+            timeStep: 10,
+            startPrice: uint256(188620000000),
+            endPrice: uint256(188620000000) * 90 / 100
+        });
+        vm.warp(1_000_000 + 50);
+
+        GPv2Order.Data memory res =
+            dutchAuction.getTradeableOrder(safe, address(0), bytes32(0), abi.encode(data), bytes(""));
+
+        assertLe(res.buyAmount, 8 * 10 ** 17);
+        assertGe(res.buyAmount, 6 * 10 ** 17);
     }
 
     /*
