@@ -11,10 +11,8 @@ contract DutchAuction is BaseConditionalOrder {
         IERC20 sellToken;
         IERC20 buyToken;
         uint256 sellAmount;
-        uint256 buyAmount;
         bytes32 appData;
         address receiver;
-        bool isSellOrder;
         bool isPartiallyFillable;
         // both oracles need to use the same numeraire
         IAggregatorV3Interface sellTokenPriceOracle;
@@ -67,7 +65,7 @@ contract DutchAuction is BaseConditionalOrder {
             validTo,
             data.appData,
             0, // use zero fee for limit orders
-            GPv2Order.KIND_SELL,
+            GPv2Order.KIND_SELL, // only sell order support for now
             data.isPartiallyFillable,
             GPv2Order.BALANCE_ERC20,
             GPv2Order.BALANCE_ERC20
