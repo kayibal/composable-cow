@@ -28,6 +28,10 @@ const SETTLEMENT = "0x9008D19f58AAbD9eD0D60971565AA8510560ab41";
 const TWAP_ORDER_STRUCT =
   "tuple(address sellToken,address buyToken,address receiver,uint256 partSellAmount,uint256 minPartLimit,uint256 t0,uint256 n,uint256 t,uint256 span,bytes32 appData)";
 
+const DUTCH_ORDER_STRUCT =
+  "tuple(address sellToken, address buyToken, uint256 sellAmount, bytes32 appData, address receiver, bool isPartiallyFillable, uint32 startTs, uint32 duration, uint32 timeStep, address sellTokenPriceOracle, address buyTokenPriceOracle, uint256 startPrice, uint256 endPrice)"
+
+
 const CONDITIONAL_ORDER_PARAMS_STRUCT =
   "tuple(address handler, bytes32 salt, bytes staticInput)";
 
@@ -84,6 +88,22 @@ interface TWAPCliOptions extends RootCliOptions {
   span: number;
 }
 
+interface DutchAuctionData {
+  sellToken: string;
+  buyToken: string;
+  sellAmount: string;
+  appData: string;
+  receiver: string;
+  isPartiallyFillable: boolean;
+  startTs: number;
+  duration: number;
+  timeStep: number;
+  sellTokenPriceOracle: string;
+  buyTokenPriceOracle: string;
+  startPrice: string;
+  endPrice: string;
+}
+
 /**
  * Options for the `setFallbackHandler` command
  * @property handler Address of the fallback handler
@@ -104,7 +124,7 @@ const getTxServiceUrl = (chainId: number) => {
     case 5:
       return "https://safe-transaction-goerli.safe.global/";
     case 100:
-      return "https://safe-transaction-xdai.safe.global/";
+      return "https://safe-transaction-gnosis-chain.safe.global";
     default:
       throw new Error(`Unsupported chainId: ${chainId}`);
   }
@@ -214,6 +234,80 @@ async function proposeTransaction(
   console.log(`Submitted Transaction hash: ${safeTxHash}`);
 }
 
+async function createDutchAuction(options: RootCliOptions) {
+  const { safeService, safe, signer } = await getSafeAndService(options);
+  const sellTokenOracle = "0xa767f745331D267c7751297D982b050c93985627";
+  const provider = new ethers.providers.JsonRpcProvider(options.rpcUrl);
+  const handler = "0xc089745e395850f2075f005e3f3492411d9d5f9c";
+  let oracleABI = [
+    {
+      "constant": true,
+      "inputs": [],
+      "name": "latestAnswer",  // the function we want to call
+      "outputs": [{ "name": "", "type": "int256" }],
+      "payable": false,
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ];
+  let oracleContract = new ethers.Contract(sellTokenOracle, oracleABI, provider);
+  let latestAnswerBN = await oracleContract.latestAnswer();
+  let startPrice = latestAnswerBN.mul(ethers.BigNumber.from('110')).div(ethers.BigNumber.from('100'));
+  let endPrice = latestAnswerBN.mul(ethers.BigNumber.from('90')).div(ethers.BigNumber.from('100'));
+  let now = Math.floor(Date.now() / 1000);
+
+
+  const dutchAuction: DutchAuctionData = {
+    sellToken: "0x6A023CCd1ff6F2045C3309768eAd9E68F978f6e1",
+    buyToken: "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+    receiver: "0x0fBE13d155E734EaE790b3C24B955Ca16A52C3fC",
+    appData: keccak256(ethers.utils.toUtf8Bytes("dutch.cli")),
+    sellAmount: "10000000000000000",
+    isPartiallyFillable: false,
+    startTs: now,
+    duration: 1800,
+    timeStep: 300,
+    // https://docs.chain.link/data-feeds/price-feeds/addresses/?network=gnosis-chain
+    sellTokenPriceOracle: sellTokenOracle,
+    buyTokenPriceOracle: "0x26C31ac71010aF62E6B486D1132E266D6298857D",
+    startPrice: startPrice.toString(),
+    endPrice: endPrice.toString(),
+  }
+
+  const params: IConditionalOrder.ConditionalOrderParamsStruct = {
+    handler: handler,
+    salt: utils.keccak256(utils.toUtf8Bytes(Date.now().toString())),
+    staticInput: utils.defaultAbiCoder.encode([DUTCH_ORDER_STRUCT], [dutchAuction]),
+  };
+
+  const orderHash = utils.defaultAbiCoder.encode(
+    [CONDITIONAL_ORDER_PARAMS_STRUCT],
+    [params]
+  );
+
+  const safeTransactionData: MetaTransactionData[] = [
+    {
+      to: options.composableCow,
+      data: ComposableCoW__factory.createInterface().encodeFunctionData(
+        "create",
+        [params, true]
+      ),
+      value: "0",
+    },
+  ];
+
+  const safeTransaction = await safe.createTransaction({
+    safeTransactionData,
+    options: { nonce: await safeService.getNextNonce(options.safeAddress) },
+  });
+
+  console.log(
+    `Proposing TWAP Order Transaction: ${JSON.stringify(safeTransaction.data)}`
+  );
+  await proposeTransaction(safe, safeService, safeTransaction, signer);
+  console.log(`IConditionalOrder hash for cancelling: ${orderHash}`);
+}
+
 /**
  * Create an `IConditionalOrder` of type TWAP by submitting a `singleOrder`.
  *
@@ -247,7 +341,7 @@ async function createTwapOrder(options: TWAPCliOptions) {
   const minPartLimit = minBuyAmount.div(options.numParts);
 
   // enforce that it is a valid TWAP order
-  
+
   // sell token and buy token must be different
   if (sellToken === buyToken) {
     throw new Error("Sell token and buy token must be different");
@@ -434,6 +528,11 @@ async function main() {
       "Dispatch conditional orders on Safe using composable CoW Protocol"
     )
     .version("0.0.1");
+
+  program
+    .command("create-dutch")
+    .description("Create a dutch auction order")
+    .action(createDutchAuction)
 
   program
     .command("create-twap")
